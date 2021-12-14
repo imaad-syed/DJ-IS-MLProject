@@ -3,12 +3,14 @@ import pandas as pd
 import xgboost as xgb
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold
+from sklearn.model_selection import cross_val_score
 
 df = pd.read_csv("train.mv", header=None, sep=' ')
 test_df = pd.read_csv("test.mv", header=None, sep=' ')
 
 # taking care of the trailing space at the end of each test instance
-test_df.drop(206, axis=1, inplace=True)
+# test_df.drop(206, axis=1, inplace=True)  .. the space has been removed in the new file
 
 # replacing missing values with 0: XGBoost default handler for missing values
 df.replace('?', '0', inplace=True)
@@ -32,14 +34,12 @@ X_train = df.drop(205, axis=1).copy()
 # testing attributes
 X_test = test_df.drop(205, axis=1).copy()
 
-
 # storing the class values
 # training class values
 Y_train = df[205].copy()
 
-# splitting the training data to get validation data
-X_train, X_valid, Y_train, Y_valid = train_test_split(X_train, Y_train,
-                                                      test_size=0.1, random_state=None)
+# testing class values
+Y_test = test_df[205].copy()
 
 # initializing the parameters of the class
 # max tree depth = 9
@@ -49,27 +49,26 @@ X_train, X_valid, Y_train, Y_valid = train_test_split(X_train, Y_train,
 # regularization parameter (lambda) = 1
 # features size in every subtree = 80%
 model = xgb.XGBClassifier(base_score=0.5, colsample_bylevel=1,
-                          colsample_bytree=0.7, gamma=0, learning_rate=0.08,
+                          colsample_bytree=0.7, gamma=0, learning_rate=0.07,
                           max_delta_step=0, max_depth=9, min_child_weight=1,
-                          missing=1, n_estimators=100, nthread=-1,
+                          missing=1, n_estimators=150, nthread=-1,
                           objective='binary:logistic', reg_alpha=0,
                           reg_lambda=1, scale_pos_weight=1, seed=42, silent=True,
                           subsample=0.8)
 
+kfold = KFold(n_splits=10)
+
 # training the model using error in against validation data
-model.fit(X_train, Y_train,
-          verbose=True,
-          early_stopping_rounds=10,
-          eval_metric='error',
-          eval_set=[(X_valid, Y_valid)])
+model.fit(X_train, Y_train)
 
 
 # predict the target on the train dataset
 predict_train = model.predict(X_train)
-# print('\nTarget on train data', predict_train)
 
 # Accuracy Score on train dataset
-accuracy_train = accuracy_score(Y_train, predict_train)
+accuracy_train = cross_val_score(model, X_train, Y_train, cv=kfold, verbose=False)
+
+# accuracy_train = accuracy_score(Y_train, predict_train)
 print('\naccuracy_score on train dataset : ', accuracy_train)
 
 # predict the target on the test dataset
@@ -83,7 +82,8 @@ for i in predict_test:
 
 file.close()
 
-# Accuracy Score on validation dataset
-predict_valid = model.predict(X_valid)
-accuracy_valid = accuracy_score(Y_valid, predict_valid)
+# Accuracy Score on test dataset
+
+accuracy_valid = accuracy_score(Y_test, predict_test)
 print('\naccuracy_score on validation dataset : ', accuracy_valid)
+
